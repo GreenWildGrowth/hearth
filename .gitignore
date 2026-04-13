@@ -1,0 +1,24 @@
+# virtual env
+virt_env/
+.venv/
+venv/
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# packaging
+*.egg-info/
+build/
+dist/
+
+# data
+data/raw/
+data/processed/
+data/metadata/
+
+# notebook / misc
+.ipynb_checkpoints/
+.DS_Store
