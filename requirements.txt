@@ -5,3 +5,7 @@ pandas
 numpy
 rasterio
 scikit-learn
+pystac-client
+planetary-computer
+requests
+PyYAML
