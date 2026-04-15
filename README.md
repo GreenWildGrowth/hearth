@@ -1,22 +1,179 @@
-# Urban Microclimate MVP
+# Hearth
 
-Estimate the relationship between vegetation, built-up intensity and surface temperature using satellite data.
+**Hearth** is a work-in-progress pipeline for exploring urban microclimate patterns from satellite data.
 
-## Pipeline
+It estimates relationships between:
 
-1. Sentinel-2 → NDVI
-2. Landsat → LST + NDBI
-3. Spatial aggregation (500m grid)
-4. Linear model
+- vegetation (`NDVI`)
+- built environment (`NDBI`)
+- land surface temperature (`LST`)
 
-## Result
+for a given city, using publicly available satellite imagery.
 
-LST ≈ -13.6 * NDVI + 31.3 * NDBI + 46.9  
-R² ≈ 0.48
+---
 
-## Usage
+## Overview
 
-```bash
-python scripts/run_pipeline.py
-python scripts/build_dataset.py
-python scripts/train_model.py
+For each configured location, the pipeline:
+
+1. selects satellite scenes (Sentinel-2, Landsat)
+2. builds a spatial grid
+3. computes:
+   - NDVI (vegetation)
+   - NDBI (built-up index)
+   - LST (surface temperature)
+4. aggregates raster values to grid cells
+5. fits simple statistical models to explore relationships
+
+The goal is **exploration and comparison across cities**, not production modeling.
+
+---
+
+## Status
+
+> ⚠️ **Work in progress**
+
+This repository is an evolving research prototype.
+
+What works:
+- end-to-end pipeline per location
+- STAC-based scene selection (Planetary Computer)
+- NDVI / NDBI / LST computation
+- grid aggregation
+- basic statistical modeling
+- multi-city comparisons
+
+What is still evolving:
+- scene selection heuristics
+- masking (clouds, water, etc.)
+- interpretation of coefficients
+- additional explanatory variables (e.g. altitude, distance to coast)
+- model robustness
+
+---
+
+## Quick start
+
+### 1. Configure a location
+
+Edit `locations.yaml` and add a new entry:
+
+```yaml
+paris:
+  label: "Paris"
+  bbox_wgs84:
+    min_lon: 2.2
+    min_lat: 48.75
+    max_lon: 2.5
+    max_lat: 48.95
+  center_wgs84:
+    lon: 2.3522
+    lat: 48.8566
+  grid_size_m: 500
+  timezone: "Europe/Paris"
+  preferred_dates:
+    sentinel: "2025-07"
+    landsat: "2025-07"
+  max_cloud_cover:
+    sentinel: 10
+    landsat: 10
+2. Run the full pipeline
+python scripts/run_location.py --location paris --force-fetch
+
+This executes:
+
+data fetching
+grid generation
+NDVI / NDBI / LST computation
+aggregation
+model training
+Outputs
+
+For each location:
+
+data/
+  raw/<location>/
+    scene_manifest.json
+
+  processed/<location>/
+    grid_500m.geojson
+    ndvi.tif
+    ndbi.tif
+    lst.tif
+    dataset.parquet
+    model_report.json
+Modeling
+
+The current modeling step includes:
+
+linear regression
+train/test split
+correlation analysis
+standardized coefficients
+optional interaction term (NDVI × NDBI)
+
+This is designed for interpretability, not predictive performance.
+
+Interpretation
+
+Results can vary significantly across cities.
+
+Typical observations:
+
+inland cities:
+NDBI ↑ → LST ↑
+NDVI ↑ → LST ↓
+coastal or complex urban environments:
+relationships can invert
+indices may act as spatial proxies rather than causal drivers
+
+Important:
+
+A coefficient should not be interpreted as causal without additional variables.
+
+Limitations
+strong correlation between NDVI and NDBI
+no full cloud / QA masking yet
+no terrain / coastal effects modeled
+single-scene selection (no compositing)
+linear models only
+Future work
+
+Planned improvements:
+
+better scene compositing
+cloud / water masking
+additional features:
+elevation
+distance to coast
+land use
+multi-city modeling
+non-linear models
+Requirements
+
+Typical dependencies:
+
+geopandas
+rasterio
+numpy
+pandas
+scikit-learn
+shapely
+pystac-client
+planetary-computer
+Disclaimer
+
+This project is experimental.
+
+Results should be interpreted cautiously, especially across different urban contexts.
+
+
+---
+
+# 💡 Option (si tu veux encore plus pro)
+
+Tu peux ajouter en haut :
+
+```markdown
+![Status](https://img.shields.io/badge/status-WIP-orange)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
