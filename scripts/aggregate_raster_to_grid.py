@@ -1,23 +1,26 @@
+# scripts/aggregate_raster_to_grid.py
+
 import argparse
 from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 import rasterio
 from rasterio.mask import mask
 
 
-def aggregate_raster_to_grid(grid_path, raster_path, value_name):
-    grid = gpd.read_file(grid_path)
-    results = []
+def aggregate_one_raster(grid: gpd.GeoDataFrame, raster_path: Path, value_name: str) -> gpd.GeoDataFrame:
+    results_mean = []
+    results_count = []
 
     with rasterio.open(raster_path) as src:
         raster_crs = src.crs
         nodata = src.nodata
 
-        grid = grid.to_crs(raster_crs)
+        grid_proj = grid.to_crs(raster_crs)
 
-        for _, row in grid.iterrows():
+        for _, row in grid_proj.iterrows():
             geom = [row.geometry]
 
             try:
@@ -31,34 +34,45 @@ def aggregate_raster_to_grid(grid_path, raster_path, value_name):
 
                 if data.size == 0:
                     value = np.nan
+                    count = 0
                 else:
                     value = float(data.mean())
+                    count = int(data.size)
 
             except Exception:
                 value = np.nan
+                count = 0
 
-            results.append(value)
+            results_mean.append(value)
+            results_count.append(count)
 
-    grid[value_name] = results
+    grid[value_name] = results_mean
+    grid[f"{value_name}_count"] = results_count
     return grid
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--grid", required=True)
-    parser.add_argument("--raster", required=True)
-    parser.add_argument("--value-name", required=True)
-    parser.add_argument("--out", required=True)
-
+    parser.add_argument("--grid", required=True, help="Path to grid file (GeoJSON/Parquet supported by geopandas)")
+    parser.add_argument("--ndvi", required=True)
+    parser.add_argument("--ndbi", required=True)
+    parser.add_argument("--lst", required=True)
+    parser.add_argument("--out", required=True, help="Output parquet or geojson")
     args = parser.parse_args()
 
-    grid = aggregate_raster_to_grid(
-        args.grid,
-        args.raster,
-        args.value_name,
-    )
-
+    grid_path = Path(args.grid)
     out_path = Path(args.out)
+
+    grid = gpd.read_file(grid_path)
+
+    # Keep a stable row id if none exists
+    if "cell_id" not in grid.columns:
+        grid["cell_id"] = np.arange(len(grid))
+
+    grid = aggregate_one_raster(grid, Path(args.ndvi), "ndvi_mean")
+    grid = aggregate_one_raster(grid, Path(args.ndbi), "ndbi_mean")
+    grid = aggregate_one_raster(grid, Path(args.lst), "lst_mean")
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     if out_path.suffix.lower() == ".geojson":
@@ -68,8 +82,10 @@ def main():
     else:
         raise ValueError("Output must end with .geojson or .parquet")
 
-    print(f"Saved to {out_path}")
-    print(grid[[c for c in grid.columns if c != 'geometry']].head())
+    print(f"[ok] Saved aggregated dataset to {out_path}")
+
+    preview_cols = [c for c in ["cell_id", "ndvi_mean", "ndvi_mean_count", "ndbi_mean", "ndbi_mean_count", "lst_mean", "lst_mean_count"] if c in grid.columns]
+    print(grid[preview_cols].head())
 
 
 if __name__ == "__main__":

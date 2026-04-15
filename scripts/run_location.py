@@ -1,175 +1,34 @@
+# scripts/run_location.py
+
 from __future__ import annotations
 
 import argparse
 import subprocess
 import sys
-from pathlib import Path
 
 from hearth.locations import get_location_config
-from hearth.paths import (
-    get_location_paths,
-    find_sentinel_red,
-    find_sentinel_nir,
-    find_landsat_st_b10,
-    find_landsat_sr_b5,
-    find_landsat_sr_b6,
-)
+from hearth.paths import get_location_paths
 
 
-def run_cmd(args: list[str]) -> None:
-    print(">>>", " ".join(args))
-    subprocess.run(args, check=True)
-
-
-def build_grid(location: str) -> None:
-    """
-    Assumes build_grid.py is upgraded to accept:
-      --location <name>
-    """
-    run_cmd(
-        [
-            sys.executable,
-            "scripts/build_grid.py",
-            "--location",
-            location,
-        ]
-    )
-
-
-def compute_indices(location: str) -> None:
-    paths = get_location_paths(location)
-
-    red = find_sentinel_red(location)
-    nir = find_sentinel_nir(location)
-
-    st_b10 = find_landsat_st_b10(location)
-    sr_b5 = find_landsat_sr_b5(location)
-    sr_b6 = find_landsat_sr_b6(location)
-
-    run_cmd(
-        [
-            sys.executable,
-            "scripts/compute_ndvi.py",
-            "--red",
-            str(red),
-            "--nir",
-            str(nir),
-            "--out",
-            str(paths.ndvi_raster_path),
-        ]
-    )
-
-    run_cmd(
-        [
-            sys.executable,
-            "scripts/compute_lst.py",
-            "--st",
-            str(st_b10),
-            "--out",
-            str(paths.lst_raster_path),
-        ]
-    )
-
-    run_cmd(
-        [
-            sys.executable,
-            "scripts/compute_ndbi.py",
-            "--b5",
-            str(sr_b5),
-            "--b6",
-            str(sr_b6),
-            "--out",
-            str(paths.ndbi_raster_path),
-        ]
-    )
-
-
-def aggregate(location: str) -> None:
-    paths = get_location_paths(location)
-
-    run_cmd(
-        [
-            sys.executable,
-            "scripts/aggregate_raster_to_grid.py",
-            "--grid",
-            str(paths.grid_path),
-            "--raster",
-            str(paths.ndvi_raster_path),
-            "--value-name",
-            "ndvi_mean",
-            "--out",
-            str(paths.grid_ndvi_path),
-        ]
-    )
-
-    run_cmd(
-        [
-            sys.executable,
-            "scripts/aggregate_raster_to_grid.py",
-            "--grid",
-            str(paths.grid_path),
-            "--raster",
-            str(paths.ndbi_raster_path),
-            "--value-name",
-            "ndbi_mean",
-            "--out",
-            str(paths.grid_ndbi_path),
-        ]
-    )
-
-    run_cmd(
-        [
-            sys.executable,
-            "scripts/aggregate_raster_to_grid.py",
-            "--grid",
-            str(paths.grid_path),
-            "--raster",
-            str(paths.lst_raster_path),
-            "--value-name",
-            "lst_mean",
-            "--out",
-            str(paths.grid_lst_path),
-        ]
-    )
-
-
-def build_dataset(location: str) -> None:
-    """
-    Assumes build_dataset.py is upgraded to accept:
-      --location <name>
-    """
-    run_cmd(
-        [
-            sys.executable,
-            "scripts/build_dataset.py",
-            "--location",
-            location,
-        ]
-    )
+def run_cmd(cmd: list[str]) -> None:
+    print()
+    print(">>>", " ".join(cmd))
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        raise RuntimeError(f"Command failed with exit code {result.returncode}: {' '.join(cmd)}")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Run the microclimate pipeline for one location."
-    )
-    parser.add_argument("--location", required=True, help="Location name, e.g. toulouse")
-
-    parser.add_argument("--build-grid", action="store_true")
-    parser.add_argument("--compute-indices", action="store_true")
-    parser.add_argument("--aggregate", action="store_true")
-    parser.add_argument("--build-dataset", action="store_true")
-
-    parser.add_argument(
-        "--all",
-        action="store_true",
-        help="Run all steps: build grid, compute indices, aggregate, build dataset",
-    )
-
+    parser = argparse.ArgumentParser(description="Run the full urban microclimate pipeline for one location.")
+    parser.add_argument("--location", required=True, help="Location key from locations.yaml")
+    parser.add_argument("--skip-fetch", action="store_true", help="Skip STAC fetch / manifest generation")
+    parser.add_argument("--skip-train", action="store_true", help="Skip model training")
+    parser.add_argument("--force-fetch", action="store_true", help="Force re-selection of scenes")
     args = parser.parse_args()
 
     location = args.location.strip().lower()
 
-    # Validate config exists
+    # Validate location early
     cfg = get_location_config(location)
     paths = get_location_paths(location)
     paths.ensure_dirs()
@@ -179,27 +38,38 @@ def main() -> None:
     print(f"Grid size: {cfg.grid_size_m} m")
     print(f"Processed dir: {paths.processed_dir}")
 
-    do_build_grid = args.all or args.build_grid
-    do_compute_indices = args.all or args.compute_indices
-    do_aggregate = args.all or args.aggregate
-    do_build_dataset = args.all or args.build_dataset
+    py = sys.executable
 
-    if not any([do_build_grid, do_compute_indices, do_aggregate, do_build_dataset]):
-        parser.error("No step selected. Use --all or one of --build-grid, --compute-indices, --aggregate, --build-dataset")
+    if not args.skip_fetch:
+        cmd = [py, "scripts/fetch_location_data.py", "--location", location]
+        if args.force_fetch:
+            cmd.append("--force")
+        run_cmd(cmd)
 
-    if do_build_grid:
-        build_grid(location)
+    run_cmd([py, "scripts/build_grid.py", "--location", location])
+    run_cmd([py, "scripts/compute_ndvi.py", "--location", location])
+    run_cmd([py, "scripts/compute_ndbi.py", "--location", location])
+    run_cmd([py, "scripts/compute_lst.py", "--location", location])
 
-    if do_compute_indices:
-        compute_indices(location)
+    run_cmd([
+        py,
+        "scripts/aggregate_raster_to_grid.py",
+        "--grid", str(paths.grid_path),
+        "--ndvi", str(paths.processed_dir / "ndvi.tif"),
+        "--ndbi", str(paths.processed_dir / "ndbi.tif"),
+        "--lst", str(paths.processed_dir / "lst.tif"),
+        "--out", str(paths.processed_dir / "dataset.parquet"),
+    ])
 
-    if do_aggregate:
-        aggregate(location)
+    if not args.skip_train:
+        run_cmd([
+            py,
+            "scripts/train_model.py",
+            "--dataset", str(paths.processed_dir / "dataset.parquet"),
+        ])
 
-    if do_build_dataset:
-        build_dataset(location)
-
-    print("Pipeline finished successfully.")
+    print()
+    print("[ok] Full pipeline completed successfully.")
 
 
 if __name__ == "__main__":
