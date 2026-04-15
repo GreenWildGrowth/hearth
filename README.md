@@ -4,9 +4,9 @@
 
 It estimates relationships between:
 
-- vegetation (`NDVI`)
-- built environment (`NDBI`)
-- land surface temperature (`LST`)
+* vegetation (`NDVI`)
+* built environment (`NDBI`)
+* land surface temperature (`LST`)
 
 for a given city, using publicly available satellite imagery.
 
@@ -19,9 +19,10 @@ For each configured location, the pipeline:
 1. selects satellite scenes (Sentinel-2, Landsat)
 2. builds a spatial grid
 3. computes:
-   - NDVI (vegetation)
-   - NDBI (built-up index)
-   - LST (surface temperature)
+
+   * NDVI (vegetation)
+   * NDBI (built-up index)
+   * LST (surface temperature)
 4. aggregates raster values to grid cells
 5. fits simple statistical models to explore relationships
 
@@ -35,20 +36,22 @@ The goal is **exploration and comparison across cities**, not production modelin
 
 This repository is an evolving research prototype.
 
-What works:
-- end-to-end pipeline per location
-- STAC-based scene selection (Planetary Computer)
-- NDVI / NDBI / LST computation
-- grid aggregation
-- basic statistical modeling
-- multi-city comparisons
+### What works
 
-What is still evolving:
-- scene selection heuristics
-- masking (clouds, water, etc.)
-- interpretation of coefficients
-- additional explanatory variables (e.g. altitude, distance to coast)
-- model robustness
+* end-to-end pipeline per location
+* STAC-based scene selection (Planetary Computer)
+* NDVI / NDBI / LST computation
+* grid aggregation
+* basic statistical modeling
+* multi-city comparisons
+
+### What is still evolving
+
+* scene selection heuristics
+* masking (clouds, water, etc.)
+* interpretation of coefficients
+* additional explanatory variables (e.g. altitude, distance to coast)
+* model robustness
 
 ---
 
@@ -77,20 +80,31 @@ paris:
   max_cloud_cover:
     sentinel: 10
     landsat: 10
-2. Run the full pipeline
+```
+
+---
+
+### 2. Run the full pipeline
+
+```bash
 python scripts/run_location.py --location paris --force-fetch
+```
 
 This executes:
 
-data fetching
-grid generation
-NDVI / NDBI / LST computation
-aggregation
-model training
-Outputs
+* data fetching
+* grid generation
+* NDVI / NDBI / LST computation
+* aggregation
+* model training
+
+---
+
+## Outputs
 
 For each location:
 
+```text
 data/
   raw/<location>/
     scene_manifest.json
@@ -102,78 +116,87 @@ data/
     lst.tif
     dataset.parquet
     model_report.json
-Modeling
+```
+
+---
+
+## Modeling
 
 The current modeling step includes:
 
-linear regression
-train/test split
-correlation analysis
-standardized coefficients
-optional interaction term (NDVI × NDBI)
+* linear regression
+* train/test split
+* correlation analysis
+* standardized coefficients
+* optional interaction term (`NDVI × NDBI`)
 
-This is designed for interpretability, not predictive performance.
+This is designed for **interpretability**, not predictive performance.
 
-Interpretation
+---
+
+## Interpretation
 
 Results can vary significantly across cities.
 
-Typical observations:
+### Typical observations
 
-inland cities:
-NDBI ↑ → LST ↑
-NDVI ↑ → LST ↓
-coastal or complex urban environments:
-relationships can invert
-indices may act as spatial proxies rather than causal drivers
+**Inland cities:**
 
-Important:
+* `NDBI ↑ → LST ↑`
+* `NDVI ↑ → LST ↓`
 
-A coefficient should not be interpreted as causal without additional variables.
+**Coastal or complex urban environments:**
 
-Limitations
-strong correlation between NDVI and NDBI
-no full cloud / QA masking yet
-no terrain / coastal effects modeled
-single-scene selection (no compositing)
-linear models only
-Future work
+* relationships can invert
+* indices may act as spatial proxies rather than causal drivers
+
+> ⚠️ A coefficient should **not** be interpreted as causal without additional variables.
+
+---
+
+## Limitations
+
+* strong correlation between NDVI and NDBI
+* no full cloud / QA masking yet
+* no terrain / coastal effects modeled
+* single-scene selection (no compositing)
+* linear models only
+
+---
+
+## Future work
 
 Planned improvements:
 
-better scene compositing
-cloud / water masking
-additional features:
-elevation
-distance to coast
-land use
-multi-city modeling
-non-linear models
-Requirements
+* better scene compositing
+* cloud / water masking
+* additional features:
+
+  * elevation
+  * distance to coast
+  * land use
+* multi-city modeling
+* non-linear models
+
+---
+
+## Requirements
 
 Typical dependencies:
 
-geopandas
-rasterio
-numpy
-pandas
-scikit-learn
-shapely
-pystac-client
-planetary-computer
-Disclaimer
+* geopandas
+* rasterio
+* numpy
+* pandas
+* scikit-learn
+* shapely
+* pystac-client
+* planetary-computer
+
+---
+
+## Disclaimer
 
 This project is experimental.
 
 Results should be interpreted cautiously, especially across different urban contexts.
-
-
----
-
-# 💡 Option (si tu veux encore plus pro)
-
-Tu peux ajouter en haut :
-
-```markdown
-![Status](https://img.shields.io/badge/status-WIP-orange)
-![Python](https://img.shields.io/badge/python-3.10%2B-blue)
