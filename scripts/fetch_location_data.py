@@ -15,7 +15,8 @@ from shapely.geometry import box, shape
 
 from hearth.locations import get_location_config
 from hearth.paths import get_location_paths
-
+from datetime import datetime, timezone
+from dateutil.relativedelta import relativedelta
 
 PC_STAC_URL = "https://planetarycomputer.microsoft.com/api/stac/v1"
 
@@ -295,8 +296,53 @@ def _select_best_sentinel_item(
         },
     )
 
+def _parse_date_pref_bounds(date_pref: str | None) -> tuple[datetime, datetime] | None:
+    """
+    Supported:
+      - YYYY-MM
+      - YYYY-MM-DD
+      - YYYY-MM-DD/YYYY-MM-DD
+    Returns UTC datetimes [start, end].
+    """
+    if not date_pref:
+        return None
 
-def fetch_best_sentinel(location: str) -> SceneSelection:
+    dt = _resolve_datetime_interval(date_pref)
+    if dt is None:
+        return None
+
+    start_s, end_s = dt.split("/")
+
+    if len(start_s) == 7:
+        start = datetime.strptime(start_s + "-01", "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    else:
+        start = datetime.strptime(start_s, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+
+    if len(end_s) == 7:
+        year, month = map(int, end_s.split("-"))
+        last_day = calendar.monthrange(year, month)[1]
+        end = datetime(year, month, last_day, tzinfo=timezone.utc)
+    else:
+        end = datetime.strptime(end_s, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+
+    return start, end
+
+
+def _format_datetime_interval(start: datetime, end: datetime) -> str:
+    return f"{start.date().isoformat()}/{end.date().isoformat()}"
+
+
+def _expand_date_pref(date_pref: str | None, months_before: int, months_after: int) -> str | None:
+    bounds = _parse_date_pref_bounds(date_pref)
+    if bounds is None:
+        return None
+
+    start, end = bounds
+    start2 = start - relativedelta(months=months_before)
+    end2 = end + relativedelta(months=months_after)
+    return _format_datetime_interval(start2, end2)
+
+def fetch_best_sentinel(location: str, min_coverage: float = 0.30) -> SceneSelection:
     cfg = get_location_config(location)
 
     date_pref = None
@@ -306,14 +352,28 @@ def fetch_best_sentinel(location: str) -> SceneSelection:
     if cfg.max_cloud_cover:
         max_cloud = cfg.max_cloud_cover.get("sentinel")
 
-    dt = _resolve_datetime_interval(date_pref)
+    # Search strategy:
+    # 1) preferred window as-is
+    # 2) widen by +/-1 month
+    # 3) widen by +/-3 months
+    # 4) widen by +/-6 months
+    candidate_intervals: list[tuple[str, str | None]] = []
 
-    items = _search_items(
-        collection="sentinel-2-l2a",
-        bbox=list(cfg.bbox_tuple),
-        dt=dt,
-        max_cloud=max_cloud,
-    )
+    base_dt = _resolve_datetime_interval(date_pref)
+    candidate_intervals.append(("preferred", base_dt))
+
+    if date_pref is not None:
+        candidate_intervals.append(("expanded_pm1m", _expand_date_pref(date_pref, 1, 1)))
+        candidate_intervals.append(("expanded_pm3m", _expand_date_pref(date_pref, 3, 3)))
+        candidate_intervals.append(("expanded_pm6m", _expand_date_pref(date_pref, 6, 6)))
+
+    seen = set()
+    deduped_intervals: list[tuple[str, str | None]] = []
+    for label, dt in candidate_intervals:
+        key = dt or "NONE"
+        if key not in seen:
+            deduped_intervals.append((label, dt))
+            seen.add(key)
 
     logical_to_candidates = {
         "red": ["B04"],
@@ -322,10 +382,71 @@ def fetch_best_sentinel(location: str) -> SceneSelection:
         "qa": ["SCL"],
     }
 
-    return _select_best_sentinel_item(
-        items=items,
-        bbox_wgs84=list(cfg.bbox_tuple),
-        logical_to_candidates=logical_to_candidates,
+    best_scene = None
+    best_stage = None
+
+    for stage_label, dt in deduped_intervals:
+        print(f"[sentinel] trying search window '{stage_label}': {dt}")
+
+        items = _search_items(
+            collection="sentinel-2-l2a",
+            bbox=list(cfg.bbox_tuple),
+            dt=dt,
+            max_cloud=max_cloud,
+        )
+
+        if not items:
+            print(f"[sentinel] no items found for window '{stage_label}'")
+            continue
+
+        try:
+            scene = _select_best_sentinel_item(
+                items=items,
+                bbox_wgs84=list(cfg.bbox_tuple),
+                logical_to_candidates=logical_to_candidates,
+            )
+        except RuntimeError as e:
+            print(f"[sentinel] selection failed for window '{stage_label}': {e}")
+            continue
+
+        cov = scene.coverage_ratio if scene.coverage_ratio is not None else -1.0
+        print(
+            f"[sentinel] candidate from '{stage_label}': "
+            f"item={scene.item_id} date={scene.datetime} "
+            f"coverage={scene.coverage_ratio} cloud={scene.cloud_cover}"
+        )
+
+        if best_scene is None:
+            best_scene = scene
+            best_stage = stage_label
+        else:
+            best_cov = best_scene.coverage_ratio if best_scene.coverage_ratio is not None else -1.0
+            scene_cloud = 9999.0 if scene.cloud_cover is None else scene.cloud_cover
+            best_cloud = 9999.0 if best_scene.cloud_cover is None else best_scene.cloud_cover
+
+            if (cov > best_cov) or (cov == best_cov and scene_cloud < best_cloud):
+                best_scene = scene
+                best_stage = stage_label
+
+        if scene.coverage_ratio is not None and scene.coverage_ratio >= min_coverage:
+            print(
+                f"[sentinel] accepted from '{stage_label}' "
+                f"with coverage={scene.coverage_ratio:.4f} >= {min_coverage:.2f}"
+            )
+            return scene
+
+        print(
+            f"[sentinel] coverage too low in '{stage_label}': "
+            f"{scene.coverage_ratio:.4f} < {min_coverage:.2f}"
+        )
+
+    if best_scene is None:
+        raise RuntimeError(f"No usable Sentinel scene found for {location}")
+
+    raise RuntimeError(
+        f"Best Sentinel coverage too low for {location}: "
+        f"{best_scene.coverage_ratio:.4f} < {min_coverage:.2f} "
+        f"(best window: {best_stage}, item: {best_scene.item_id})"
     )
 
 

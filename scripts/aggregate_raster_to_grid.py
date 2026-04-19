@@ -72,6 +72,15 @@ def main():
     grid = aggregate_one_raster(grid, Path(args.ndvi), "ndvi_mean")
     grid = aggregate_one_raster(grid, Path(args.ndbi), "ndbi_mean")
     grid = aggregate_one_raster(grid, Path(args.lst), "lst_mean")
+    
+    valid_ndvi = grid["ndvi_mean"].notna()
+    valid_ndbi = grid["ndbi_mean"].notna()
+    valid_lst = grid["lst_mean"].notna()
+
+    print("valid ndvi:", int(valid_ndvi.sum()))
+    print("valid ndbi:", int(valid_ndbi.sum()))
+    print("valid lst :", int(valid_lst.sum()))
+    print("valid all :", int((valid_ndvi & valid_ndbi & valid_lst).sum()))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
