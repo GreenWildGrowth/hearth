@@ -17,6 +17,139 @@ toulouse:
     sentinel: 10
     landsat: 10
 
+paris:
+  label: "Paris"
+  bbox_wgs84:
+    min_lon: 2.20
+    min_lat: 48.75
+    max_lon: 2.50
+    max_lat: 48.95
+  center_wgs84:
+    lon: 2.3522
+    lat: 48.8566
+  grid_size_m: 500
+  timezone: "Europe/Paris"
+  preferred_dates:
+    sentinel: "2025-07"
+    landsat: "2025-07"
+  max_cloud_cover:
+    sentinel: 10
+    landsat: 10
+
+lille:
+  label: "Lille"
+  bbox_wgs84:
+    min_lon: 2.90
+    min_lat: 50.55
+    max_lon: 3.25
+    max_lat: 50.75
+  center_wgs84:
+    lon: 3.0573
+    lat: 50.6292
+  grid_size_m: 500
+  timezone: "Europe/Paris"
+  preferred_dates:
+    sentinel: "2025-07"
+    landsat: "2025-07"
+  max_cloud_cover:
+    sentinel: 10
+    landsat: 10
+
+lyon:
+  label: "Lyon"
+  bbox_wgs84:
+    min_lon: 4.65
+    min_lat: 45.65
+    max_lon: 5.05
+    max_lat: 45.90
+  center_wgs84:
+    lon: 4.8357
+    lat: 45.7640
+  grid_size_m: 500
+  timezone: "Europe/Paris"
+  preferred_dates:
+    sentinel: "2025-07"
+    landsat: "2025-07"
+  max_cloud_cover:
+    sentinel: 10
+    landsat: 10
+
+marseille:
+  label: "Marseille"
+  bbox_wgs84:
+    min_lon: 5.20
+    min_lat: 43.20
+    max_lon: 5.60
+    max_lat: 43.40
+  center_wgs84:
+    lon: 5.3698
+    lat: 43.2965
+  grid_size_m: 500
+  timezone: "Europe/Paris"
+  preferred_dates:
+    sentinel: "2025-07"
+    landsat: "2025-07"
+  max_cloud_cover:
+    sentinel: 10
+    landsat: 10
+
+nice:
+  label: "Nice"
+  bbox_wgs84:
+    min_lon: 7.10
+    min_lat: 43.62
+    max_lon: 7.42
+    max_lat: 43.80
+  center_wgs84:
+    lon: 7.2620
+    lat: 43.7102
+  grid_size_m: 500
+  timezone: "Europe/Paris"
+  preferred_dates:
+    sentinel: "2025-07"
+    landsat: "2025-07"
+  max_cloud_cover:
+    sentinel: 10
+    landsat: 10
+
+bordeaux:
+  label: "Bordeaux"
+  bbox_wgs84:
+    min_lon: -0.85
+    min_lat: 44.72
+    max_lon: -0.35
+    max_lat: 44.98
+  center_wgs84:
+    lon: -0.5792
+    lat: 44.8378
+  grid_size_m: 500
+  timezone: "Europe/Paris"
+  preferred_dates:
+    sentinel: "2025-07"
+    landsat: "2025-07"
+  max_cloud_cover:
+    sentinel: 10
+    landsat: 10
+
+nantes:
+  label: "Nantes"
+  bbox_wgs84:
+    min_lon: -1.80
+    min_lat: 47.10
+    max_lon: -1.25
+    max_lat: 47.35
+  center_wgs84:
+    lon: -1.5536
+    lat: 47.2184
+  grid_size_m: 500
+  timezone: "Europe/Paris"
+  preferred_dates:
+    sentinel: "2025-07"
+    landsat: "2025-07"
+  max_cloud_cover:
+    sentinel: 10
+    landsat: 10
+
 madrid:
   label: "Madrid"
   bbox_wgs84:
@@ -55,18 +188,18 @@ barcelona:
     sentinel: 10
     landsat: 10
 
-marseille:
-  label: "Marseille"
+seville:
+  label: "Seville"
   bbox_wgs84:
-    min_lon: 5.2
-    min_lat: 43.2
-    max_lon: 5.6
-    max_lat: 43.4
+    min_lon: -6.15
+    min_lat: 37.28
+    max_lon: -5.80
+    max_lat: 37.48
   center_wgs84:
-    lon: 5.3698
-    lat: 43.2965
+    lon: -5.9845
+    lat: 37.3891
   grid_size_m: 500
-  timezone: "Europe/Paris"
+  timezone: "Europe/Madrid"
   preferred_dates:
     sentinel: "2025-07"
     landsat: "2025-07"
@@ -74,18 +207,113 @@ marseille:
     sentinel: 10
     landsat: 10
 
-paris:
-  label: "Paris"
+valencia:
+  label: "Valencia"
   bbox_wgs84:
-    min_lon: 2.2
-    min_lat: 48.75
-    max_lon: 2.5
-    max_lat: 48.95
+    min_lon: -0.55
+    min_lat: 39.35
+    max_lon: -0.20
+    max_lat: 39.55
   center_wgs84:
-    lon: 2.3522
-    lat: 48.8566
+    lon: -0.3763
+    lat: 39.4699
   grid_size_m: 500
-  timezone: "Europe/Paris"
+  timezone: "Europe/Madrid"
+  preferred_dates:
+    sentinel: "2025-07"
+    landsat: "2025-07"
+  max_cloud_cover:
+    sentinel: 10
+    landsat: 10
+
+malaga:
+  label: "Malaga"
+  bbox_wgs84:
+    min_lon: -4.65
+    min_lat: 36.62
+    max_lon: -4.20
+    max_lat: 36.82
+  center_wgs84:
+    lon: -4.4214
+    lat: 36.7213
+  grid_size_m: 500
+  timezone: "Europe/Madrid"
+  preferred_dates:
+    sentinel: "2025-07"
+    landsat: "2025-07"
+  max_cloud_cover:
+    sentinel: 10
+    landsat: 10
+
+lisbon:
+  label: "Lisbon"
+  bbox_wgs84:
+    min_lon: -9.30
+    min_lat: 38.65
+    max_lon: -9.00
+    max_lat: 38.85
+  center_wgs84:
+    lon: -9.1393
+    lat: 38.7223
+  grid_size_m: 500
+  timezone: "Europe/Lisbon"
+  preferred_dates:
+    sentinel: "2025-07"
+    landsat: "2025-07"
+  max_cloud_cover:
+    sentinel: 10
+    landsat: 10
+
+milan:
+  label: "Milan"
+  bbox_wgs84:
+    min_lon: 9.00
+    min_lat: 45.35
+    max_lon: 9.35
+    max_lat: 45.55
+  center_wgs84:
+    lon: 9.1900
+    lat: 45.4642
+  grid_size_m: 500
+  timezone: "Europe/Rome"
+  preferred_dates:
+    sentinel: "2025-07"
+    landsat: "2025-07"
+  max_cloud_cover:
+    sentinel: 10
+    landsat: 10
+
+genoa:
+  label: "Genoa"
+  bbox_wgs84:
+    min_lon: 8.75
+    min_lat: 44.30
+    max_lon: 9.10
+    max_lat: 44.50
+  center_wgs84:
+    lon: 8.9463
+    lat: 44.4056
+  grid_size_m: 500
+  timezone: "Europe/Rome"
+  preferred_dates:
+    sentinel: "2025-07"
+    landsat: "2025-07"
+  max_cloud_cover:
+    sentinel: 10
+    landsat: 10
+
+berlin:
+  label: "Berlin"
+  bbox_wgs84:
+    min_lon: 13.10
+    min_lat: 52.35
+    max_lon: 13.75
+    max_lat: 52.65
+  center_wgs84:
+    lon: 13.4050
+    lat: 52.5200
+  grid_size_m: 500
+  timezone: "Europe/Berlin"
   preferred_dates:
     sentinel: "2025-07"
     landsat: "2025-07"
