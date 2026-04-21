@@ -1,0 +1,148 @@
+# =========================
+
+# Python
+
+# =========================
+
+**pycache**/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+
+# 🧪 Testing / coverage
+
+# =========================
+
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# =========================
+
+# 📦 Packaging
+
+# =========================
+
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# =========================
+
+# 🧠 Jupyter / notebooks
+
+# =========================
+
+.ipynb_checkpoints/
+
+# =========================
+
+# 🧾 Logs
+
+# =========================
+
+*.log
+
+# =========================
+
+# ⚙️ IDE / Editor
+
+# =========================
+
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# =========================
+
+# 🗂️ Data (IMPORTANT)
+
+# =========================
+
+data/raw/
+data/interim/
+data/processed/
+*.parquet
+*.csv
+*.feather
+*.h5
+
+# (tu peux commenter si tu veux versionner certains datasets)
+
+# =========================
+
+# 🌍 Geospatial
+
+# =========================
+
+*.tif
+*.tiff
+*.nc
+*.grib
+*.grb
+*.shp
+*.geojson
+
+# =========================
+
+# 🤖 ML models / artifacts
+
+# =========================
+
+models/
+checkpoints/
+*.ckpt
+*.pt
+*.pth
+*.onnx
+
+# =========================
+
+# 📊 Outputs / reports
+
+# =========================
+
+outputs/
+reports/
+figures/
+
+# =========================
+
+# 🚀 Streamlit
+
+# =========================
+
+.streamlit/secrets.toml
+
+# =========================
+
+# 🔐 Secrets / env
+
+# =========================
+
+.env
+.env.*
+*.key
+*.pem
+
+# =========================
+
+# 🧱 Misc
+
+# =========================
+
+.DS_Store
+Thumbs.db
+
