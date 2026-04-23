@@ -3,7 +3,7 @@ import re
 import pandas as pd
 import rasterio
 
-CITIES_CSV = Path("data/raw/cities.csv")
+CITIES_CSV = Path("data/raw/candidate_cities.csv")
 OUT_CSV = Path("data/interim/cities_bioclim.csv")
 
 CURRENT_DIR = Path("data/climate/current")
