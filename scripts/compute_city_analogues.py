@@ -17,18 +17,18 @@ BIO_IDS = list(range(1, 20))
 N_PCS = 4
 TOP_K = 3
 
-# Modes disponibles:
+# Mode recommandé après sweep :
 # - "climate_only"
 # - "weighted"
-# - "rerank"
-MATCH_MODE = "rerank"
+# - "weighted_normalized"
+MATCH_MODE = "weighted_normalized"
 
-# Paramètres urbains
-URBAN_WEIGHT_POP = 0.10
-URBAN_WEIGHT_CAPITAL = 0.05
+# Poids internes de la distance urbaine brute
+URBAN_WEIGHT_POP = 1.0
+URBAN_WEIGHT_CAPITAL = 0.5
 
-# Pour le reranking
-RERANK_CANDIDATES = 20
+# Pondération globale de la composante urbaine
+URBAN_LAMBDA = 0.25
 
 
 def safe_bool(x) -> int:
@@ -67,7 +67,6 @@ def main():
     current_cols = [f"current_bio{i}" for i in BIO_IDS]
     future_cols = [f"future_mean_bio{i}" for i in BIO_IDS]
 
-    # Champs urbains attendus
     if "population" not in df.columns:
         df["population"] = np.nan
     if "is_country_capital" not in df.columns:
@@ -76,7 +75,6 @@ def main():
     df["population"] = pd.to_numeric(df["population"], errors="coerce")
     df["is_country_capital"] = df["is_country_capital"].map(safe_bool)
 
-    # Diagnostic NaN sur climat
     df["n_missing_current"] = df[current_cols].isna().sum(axis=1)
     df["n_missing_future"] = df[future_cols].isna().sum(axis=1)
     df["is_valid_for_analog"] = (
@@ -93,7 +91,6 @@ def main():
             f"required>={max(N_PCS, TOP_K + 1)}"
         )
 
-    # Matrices climatiques
     X_current = valid_df[current_cols].to_numpy(dtype=float)
     X_future = valid_df[future_cols].to_numpy(dtype=float)
 
@@ -105,17 +102,14 @@ def main():
     X_current_pca = pca.fit_transform(X_current_scaled)
     X_future_pca = pca.transform(X_future_scaled)
 
-    # Distances climatiques
     climate_dist = compute_pairwise_euclidean(X_future_pca, X_current_pca)
 
-    # Features urbaines
     pop = valid_df["population"].to_numpy(dtype=float)
     pop = np.where(np.isfinite(pop) & (pop > 0), pop, np.nan)
     log_pop = np.log10(pop)
 
     capital = valid_df["is_country_capital"].to_numpy(dtype=int)
 
-    # Distance urbaine pairwise
     d_pop = np.abs(log_pop[:, None] - log_pop[None, :])
     d_pop = np.where(np.isnan(d_pop), 0.0, d_pop)
 
@@ -123,7 +117,14 @@ def main():
 
     urban_dist = URBAN_WEIGHT_POP * d_pop + URBAN_WEIGHT_CAPITAL * d_cap
 
-    # On exclut le self-match exact (même ville + même pays)
+    climate_scale = float(np.nanstd(climate_dist[np.isfinite(climate_dist)]))
+    urban_scale = float(np.nanstd(urban_dist[np.isfinite(urban_dist)]))
+
+    if climate_scale == 0:
+        climate_scale = 1.0
+    if urban_scale == 0:
+        urban_scale = 1.0
+
     same_city_mask = np.zeros((len(valid_df), len(valid_df)), dtype=bool)
     for i in range(len(valid_df)):
         same_city_mask[i, :] = (
@@ -131,7 +132,6 @@ def main():
             (valid_df.loc[i, "country"] == valid_df["country"])
         ).to_numpy()
 
-    # self distance climatique utile pour debug
     self_distance = np.full(len(valid_df), np.nan)
     for i in range(len(valid_df)):
         self_idxs = np.where(same_city_mask[i])[0]
@@ -150,19 +150,21 @@ def main():
         climate_row = climate_dist[i].copy()
         urban_row = urban_dist[i].copy()
 
-        # Exclure self
         climate_row[same_city_mask[i]] = np.inf
         urban_row[same_city_mask[i]] = np.inf
 
         if MATCH_MODE == "climate_only":
             final_score = climate_row
+
         elif MATCH_MODE == "weighted":
-            final_score = climate_row + urban_row
-        elif MATCH_MODE == "rerank":
-            shortlist_idx = np.argsort(climate_row)[:RERANK_CANDIDATES]
-            rerank_score = np.full_like(climate_row, np.inf)
-            rerank_score[shortlist_idx] = climate_row[shortlist_idx] + urban_row[shortlist_idx]
-            final_score = rerank_score
+            final_score = climate_row + URBAN_LAMBDA * urban_row
+
+        elif MATCH_MODE == "weighted_normalized":
+            final_score = (
+                climate_row / climate_scale
+                + URBAN_LAMBDA * (urban_row / urban_scale)
+            )
+
         else:
             raise ValueError(f"Unknown MATCH_MODE={MATCH_MODE}")
 
@@ -174,10 +176,8 @@ def main():
             row[f"analog_{rank}_score"] = float(final_score[j])
             row[f"analog_{rank}_climate_distance"] = float(climate_row[j])
             row[f"analog_{rank}_urban_distance"] = float(urban_row[j])
-
             row[f"analog_{rank}_population"] = valid_df.loc[j, "population"]
             row[f"analog_{rank}_is_country_capital"] = valid_df.loc[j, "is_country_capital"]
-
             row[f"analog_{rank}_geo_distance_km"] = float(
                 haversine_km(
                     valid_df.loc[i, "lat"], valid_df.loc[i, "lon"],
@@ -210,6 +210,7 @@ def main():
     print(f"Wrote invalid cities to {invalid_csv}")
     print()
     print(f"Mode           : {MATCH_MODE}")
+    print(f"Urban lambda   : {URBAN_LAMBDA}")
     print(f"Total cities   : {len(df)}")
     print(f"Valid cities   : {len(valid_df)}")
     print(f"Invalid cities : {len(invalid_df)}")
@@ -230,6 +231,14 @@ def main():
     print()
     print("Top-1 climate distance stats:")
     print(out["analog_1_climate_distance"].describe())
+    print()
+    print("Top-1 same-country rate:")
+    print(
+        (
+            out["future_country"].astype(str).values
+            == out["analog_1_country"].astype(str).values
+        ).mean()
+    )
 
 
 if __name__ == "__main__":
