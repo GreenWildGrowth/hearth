@@ -221,24 +221,3 @@ Then inspect:
 - `data/processed/city_analogues_weighted_normalized.csv`
 
 That file is currently the best default output of the project.
-
-## 📚 References
-
-This project is inspired by:
-
-> *Understanding climate change from a global analysis of city analogues*  
-> (Crowther Lab, ETH Zurich)
-
-Link: https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0217592
-
----
-
-### How this repo differs
-
-While the original paper:
-- focuses on climate-only similarity
-
-This project:
-- adds urban constraints (population, capital status)
-- explores trade-offs between climate realism and urban plausibility
-- provides a reproducible pipeline and future frontend
