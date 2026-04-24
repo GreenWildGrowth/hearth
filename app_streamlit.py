@@ -20,6 +20,10 @@ def load_results(results_path: str, valid_path: str):
     return results, valid
 
 
+def build_city_key(df: pd.DataFrame, city_col: str, country_col: str):
+    return df[city_col].astype(str) + " — " + df[country_col].astype(str)
+
+
 def selected_row_as_display_df(row: pd.Series) -> pd.DataFrame:
     return pd.DataFrame({
         "field": [str(k) for k in row.index],
@@ -27,16 +31,31 @@ def selected_row_as_display_df(row: pd.Series) -> pd.DataFrame:
     })
 
 
-def build_city_key(df: pd.DataFrame, city_col: str, country_col: str):
-    return df[city_col].astype(str) + " — " + df[country_col].astype(str)
-
-
-def safe_metric(value, digits=2, suffix=""):
+def safe_float(value):
     if value is None or pd.isna(value):
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def format_number(value, digits=0, suffix=""):
+    v = safe_float(value)
+    if v is None:
         return "NA"
-    if isinstance(value, (int, float)):
-        return f"{value:.{digits}f}{suffix}"
-    return str(value)
+    return f"{v:.{digits}f}{suffix}"
+
+
+def format_large_number(value):
+    v = safe_float(value)
+    if v is None:
+        return "NA"
+    if v >= 1_000_000:
+        return f"{v / 1_000_000:.1f} M"
+    if v >= 1_000:
+        return f"{v / 1_000:.0f} k"
+    return f"{v:.0f}"
 
 
 def get_equator_shift(row_or_series, rank=1):
@@ -47,14 +66,31 @@ def get_equator_shift(row_or_series, rank=1):
     return row_or_series.get(old_col)
 
 
-def format_shift(value):
-    if value is None or pd.isna(value):
+def format_equator_shift(value):
+    v = safe_float(value)
+    if v is None:
         return "NA"
-    v = float(value)
     if abs(v) < 1e-9:
         return "0 km"
     direction = "towards equator" if v > 0 else "away from equator"
     return f"{abs(v):.0f} km {direction}"
+
+
+def climate_quality_label(value):
+    """
+    Heuristic label only. The absolute PCA distance has no universal physical unit,
+    so this should stay descriptive rather than definitive.
+    """
+    v = safe_float(value)
+    if v is None:
+        return "Unknown"
+    if v < 1.0:
+        return "Very close"
+    if v < 2.0:
+        return "Close"
+    if v < 3.5:
+        return "Moderate"
+    return "Distant"
 
 
 def get_top_k(row: pd.Series) -> int:
@@ -93,29 +129,41 @@ def analog_table_for_row(row: pd.Series):
             "rank": rank,
             "city": row.get(f"analog_{rank}_city"),
             "country": row.get(f"analog_{rank}_country"),
-            "score": row.get(f"analog_{rank}_score"),
             "climate_distance": row.get(f"analog_{rank}_climate_distance"),
-            "urban_distance": row.get(f"analog_{rank}_urban_distance"),
             "geo_distance_km": row.get(f"analog_{rank}_geo_distance_km"),
-            "equator_shift_km_signed": row.get(f"analog_{rank}_equator_shift_km_signed", row.get(f"analog_{rank}_lat_shift_km_signed")),
-            "lat_distance_km_abs": row.get(f"analog_{rank}_lat_distance_km_abs"),
+            "equator_shift_km_signed": get_equator_shift(row, rank),
             "lon_distance_km_abs": row.get(f"analog_{rank}_lon_distance_km_abs"),
-            "towards_equator": row.get(f"analog_{rank}_is_towards_equator"),
-            "min_dist_to_previous_km": row.get(f"analog_{rank}_min_distance_to_previous_analogs_km"),
             "population": row.get(f"analog_{rank}_population"),
             "is_country_capital": row.get(f"analog_{rank}_is_country_capital"),
+            # Technical columns, hidden by default.
+            "score": row.get(f"analog_{rank}_score"),
+            "urban_distance": row.get(f"analog_{rank}_urban_distance"),
+            "lat_distance_km_abs": row.get(f"analog_{rank}_lat_distance_km_abs"),
+            "towards_equator": row.get(f"analog_{rank}_is_towards_equator"),
+            "min_dist_to_previous_km": row.get(f"analog_{rank}_min_distance_to_previous_analogs_km"),
         })
+
     out = pd.DataFrame(rows)
     if not out.empty:
-        numeric_cols = [
-            "score", "climate_distance", "urban_distance", "geo_distance_km",
-            "equator_shift_km_signed", "lat_distance_km_abs", "lon_distance_km_abs",
-            "min_dist_to_previous_km", "population",
-        ]
-        for c in numeric_cols:
-            if c in out.columns:
+        for c in out.columns:
+            if c not in {"city", "country", "towards_equator"}:
                 out[c] = pd.to_numeric(out[c], errors="coerce")
     return out
+
+
+def user_friendly_analog_table(analog_df: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for _, r in analog_df.iterrows():
+        rows.append({
+            "#": int(r["rank"]),
+            "Climate analogue": f"{r['city']} — {r['country']}",
+            "Climate match": climate_quality_label(r.get("climate_distance")),
+            "Equator shift": format_equator_shift(r.get("equator_shift_km_signed")),
+            "Geographic distance": format_number(r.get("geo_distance_km"), digits=0, suffix=" km"),
+            "East/west shift": format_number(r.get("lon_distance_km_abs"), digits=0, suffix=" km"),
+            "Population": format_large_number(r.get("population")),
+        })
+    return pd.DataFrame(rows)
 
 
 def coords_for_city(city: str, country: str, rank: int, target_row: pd.Series, valid_lookup: dict):
@@ -146,11 +194,10 @@ def build_map_df(target_row: pd.Series, analog_df: pd.DataFrame, valid_lookup: d
     if pd.notna(target_lat) and pd.notna(target_lon):
         points.append({
             "label": f"{target_city} ({target_country})",
-            "kind": "Target",
+            "kind": "Selected city",
             "lat": float(target_lat),
             "lon": float(target_lon),
             "rank": 0,
-            "equator_shift_km_signed": 0.0,
         })
 
     for _, analog in analog_df.iterrows():
@@ -161,11 +208,10 @@ def build_map_df(target_row: pd.Series, analog_df: pd.DataFrame, valid_lookup: d
         if pd.notna(lat) and pd.notna(lon):
             points.append({
                 "label": f"{city} ({country})",
-                "kind": f"Analog #{rank}",
+                "kind": f"Analogue #{rank}",
                 "lat": float(lat),
                 "lon": float(lon),
                 "rank": rank,
-                "equator_shift_km_signed": analog.get("equator_shift_km_signed"),
             })
 
     return pd.DataFrame(points)
@@ -195,37 +241,27 @@ def render_map(map_df: pd.DataFrame):
         zoom=1,
     )
 
-    st.dataframe(
-        display_df[["kind", "label", "lat", "lon", "equator_shift_km_signed"]],
-        width="stretch",
-        hide_index=True,
-    )
+    with st.expander("Map data"):
+        st.dataframe(
+            display_df[["kind", "label", "lat", "lon"]],
+            width="stretch",
+            hide_index=True,
+        )
 
 
 st.title("Climate Analog Explorer")
-st.caption(
-    "Explore future climate analogs using PCA climate similarity, light urban matching, "
-    "spatial diversification, and interpretable equator-shift metrics."
-)
+st.caption("Find present-day cities whose climate resembles a selected city's projected future climate.")
 
 with st.sidebar:
-    st.header("Data")
+    st.header("City selection")
 
     default_results = DEFAULT_RESULTS if DEFAULT_RESULTS.exists() else LEGACY_RESULTS
     default_valid = DEFAULT_VALID if DEFAULT_VALID.exists() else LEGACY_VALID
 
-    results_path = st.text_input("Results CSV", str(default_results))
-    valid_path = st.text_input("Valid cities CSV", str(default_valid))
-
-    st.markdown(
-        """
-        **Expected files**
-        - results: output of `compute_city_analogues_updated.py`
-        - valid cities: table with `city`, `country`, `lat`, `lon`
-
-        The app remains compatible with the older CSV, but the north/south metrics only appear with the updated script output.
-        """
-    )
+    with st.expander("Data files", expanded=False):
+        results_path = st.text_input("Results CSV", str(default_results))
+        valid_path = st.text_input("Valid cities CSV", str(default_valid))
+        st.caption("Use the diversified CSV generated by compute_city_analogues.py when available.")
 
 if not Path(results_path).exists():
     st.error(f"Results file not found: {results_path}")
@@ -264,60 +300,61 @@ if not filtered_keys:
 selected_row = results_df.loc[results_df["city_key"] == selected_key].iloc[0]
 analog_df = analog_table_for_row(selected_row)
 
-left, right = st.columns([1.25, 1])
+st.subheader(f"{selected_row['future_city']} — {selected_row['future_country']}")
+
+if analog_df.empty:
+    st.warning("No analog columns found in the results CSV.")
+    st.stop()
+
+top1 = analog_df.iloc[0]
+
+c1, c2, c3 = st.columns(3)
+c1.metric("Best climate match", f"{top1['city']} — {top1['country']}")
+c2.metric("Shift towards equator", format_equator_shift(top1.get("equator_shift_km_signed")))
+c3.metric("Geographic distance", format_number(top1.get("geo_distance_km"), digits=0, suffix=" km"))
+
+left, right = st.columns([1.15, 1])
 
 with left:
-    st.subheader(f"Target: {selected_row['future_city']} — {selected_row['future_country']}")
+    st.markdown("### Climate analogues")
+    st.dataframe(
+        user_friendly_analog_table(analog_df),
+        width="stretch",
+        hide_index=True,
+    )
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Self distance", safe_metric(selected_row.get("self_distance")))
-    c2.metric("Top-1 climate", safe_metric(selected_row.get("analog_1_climate_distance")))
-    c3.metric("Top-1 geo", safe_metric(selected_row.get("analog_1_geo_distance_km"), digits=0, suffix=" km"))
-    c4.metric("Top-1 equator shift", format_shift(get_equator_shift(selected_row, 1)))
-
-    c5, c6, c7, c8 = st.columns(4)
-    c5.metric("Top-1 lon shift", safe_metric(selected_row.get("analog_1_lon_distance_km_abs"), digits=0, suffix=" km"))
-    c6.metric("Top-1 urban", safe_metric(selected_row.get("analog_1_urban_distance")))
-    c7.metric("Towards equator", str(selected_row.get("analog_1_is_towards_equator", "NA")))
-    c8.metric("Analogs found", str(len(analog_df)))
-
-    st.markdown("### Top analogs")
-    if analog_df.empty:
-        st.warning("No analog columns found in the results CSV.")
-    else:
-        display_cols = [
-            "rank", "city", "country", "score", "climate_distance", "geo_distance_km",
-            "equator_shift_km_signed", "lon_distance_km_abs", "towards_equator",
-            "min_dist_to_previous_km", "population", "is_country_capital",
-        ]
-        display_cols = [c for c in display_cols if c in analog_df.columns]
-        st.dataframe(
-            analog_df[display_cols],
-            width="stretch",
-            hide_index=True,
-        )
-
-    with st.expander("Raw selected row"):
-        st.dataframe(
-            selected_row_as_display_df(selected_row),
-            width="stretch",
-            hide_index=True,
-        )
+    st.markdown(
+        """
+        **How to read this:** the first city is the closest current-climate analogue.  
+        The equator shift is positive when the analogue is closer to the equator than the selected city.
+        """
+    )
 
 with right:
     st.markdown("### Map")
     map_df = build_map_df(selected_row, analog_df, valid_lookup)
     render_map(map_df)
 
-st.markdown("---")
-st.markdown("### Notes")
-st.markdown(
-    """
-    - `self_distance` tells how far the future city drifts from its current climate position.
-    - `climate_distance` is the main PCA-space climate distance.
-    - `urban_distance` is the auxiliary population/capital penalty used in matching.
-    - `geo_distance_km` is the geographic distance between target city and analog.
-    - `equator_shift_km_signed` is positive when the analog is closer to the equator than the target. It remains interpretable even if target and analog are in different hemispheres.
-    - `min_dist_to_previous_km` helps verify that diversification is actually spacing selected analogs apart.
-    """
-)
+with st.expander("Technical details", expanded=False):
+    st.markdown("### Raw analogue metrics")
+    technical_cols = [
+        "rank", "city", "country", "score", "climate_distance", "urban_distance",
+        "geo_distance_km", "equator_shift_km_signed", "lat_distance_km_abs",
+        "lon_distance_km_abs", "towards_equator", "min_dist_to_previous_km",
+        "population", "is_country_capital",
+    ]
+    technical_cols = [c for c in technical_cols if c in analog_df.columns]
+    st.dataframe(analog_df[technical_cols], width="stretch", hide_index=True)
+
+    st.markdown("### Selected city raw row")
+    st.dataframe(selected_row_as_display_df(selected_row), width="stretch", hide_index=True)
+
+    st.markdown(
+        """
+        - `climate_distance`: PCA-space climate distance. Lower is better.
+        - `score`: final internal matching score after optional urban weighting.
+        - `urban_distance`: population/capital mismatch penalty.
+        - `min_dist_to_previous_km`: spacing from previously selected analogues, useful for checking diversification.
+        - `equator_shift_km_signed`: positive when the analogue is closer to the equator than the target.
+        """
+    )
