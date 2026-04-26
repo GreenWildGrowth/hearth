@@ -1,6 +1,7 @@
 from pathlib import Path
 import pandas as pd
 import streamlit as st
+import pydeck as pdk
 
 st.set_page_config(page_title="Climate Analog Explorer", layout="wide")
 
@@ -217,36 +218,113 @@ def build_map_df(target_row: pd.Series, analog_df: pd.DataFrame, valid_lookup: d
     return pd.DataFrame(points)
 
 
-def render_map(map_df: pd.DataFrame):
+def map_color_for_rank(rank: int):
+    """Soft, coherent map palette.
+
+    The selected city is neutral/dark. Each analogue has its own color,
+    reused for both the point and its arc.
+    """
+    palette = {
+        0: [38, 50, 56, 230],      # selected city: blue-grey
+        1: [0, 121, 107, 230],     # analogue #1: teal
+        2: [245, 124, 0, 230],     # analogue #2: amber/orange
+        3: [123, 31, 162, 230],    # analogue #3: purple
+        4: [25, 118, 210, 230],    # optional: blue
+        5: [198, 40, 40, 230],     # optional: muted red
+    }
+    return palette.get(int(rank), [97, 97, 97, 220])
+
+
+def render_map(map_df):
     if map_df.empty:
-        st.info("Map unavailable: missing lat/lon.")
+        st.info("No map data")
         return
 
-    display_df = map_df.copy()
-    display_df["lat"] = pd.to_numeric(display_df["lat"], errors="coerce")
-    display_df["lon"] = pd.to_numeric(display_df["lon"], errors="coerce")
-    display_df = display_df.dropna(subset=["lat", "lon"])
+    map_df = map_df.copy()
+    map_df["lat"] = pd.to_numeric(map_df["lat"], errors="coerce")
+    map_df["lon"] = pd.to_numeric(map_df["lon"], errors="coerce")
+    map_df["rank"] = pd.to_numeric(map_df["rank"], errors="coerce").fillna(0).astype(int)
+    map_df = map_df.dropna(subset=["lat", "lon"])
 
-    if display_df.empty:
-        st.info("Map unavailable: all map points have invalid coordinates.")
+    if map_df.empty or (map_df["rank"] == 0).sum() == 0:
+        st.info("No valid map data")
         return
 
-    display_df["size"] = display_df["rank"].map(lambda r: 900 if r == 0 else 450)
+    target = map_df[map_df["rank"] == 0].iloc[0]
+    analogs = map_df[map_df["rank"] > 0].copy()
 
-    st.map(
-        display_df,
-        latitude="lat",
-        longitude="lon",
-        size="size",
-        zoom=1,
+    map_df["color"] = map_df["rank"].apply(map_color_for_rank)
+    map_df["radius"] = map_df["rank"].apply(lambda r: 170000 if r == 0 else 125000)
+
+    scatter = pdk.Layer(
+        "ScatterplotLayer",
+        data=map_df,
+        get_position="[lon, lat]",
+        get_fill_color="color",
+        get_line_color=[255, 255, 255, 220],
+        get_line_width=2,
+        get_radius="radius",
+        radius_min_pixels=6,
+        radius_max_pixels=18,
+        stroked=True,
+        filled=True,
+        pickable=True,
     )
 
-    with st.expander("Map data"):
-        st.dataframe(
-            display_df[["kind", "label", "lat", "lon"]],
-            width="stretch",
-            hide_index=True,
+    arcs_data = []
+    for _, row in analogs.iterrows():
+        rank = int(row["rank"])
+        color = map_color_for_rank(rank)
+        arcs_data.append({
+            "from_lon": float(target["lon"]),
+            "from_lat": float(target["lat"]),
+            "to_lon": float(row["lon"]),
+            "to_lat": float(row["lat"]),
+            "rank": rank,
+            "label": row.get("label", f"Analogue #{rank}"),
+            "color": color,
+            "width": max(2, 6 - rank),
+        })
+
+    arc_layer = pdk.Layer(
+        "ArcLayer",
+        data=arcs_data,
+        get_source_position="[from_lon, from_lat]",
+        get_target_position="[to_lon, to_lat]",
+        get_source_color="color",
+        get_target_color="color",
+        get_width="width",
+        pickable=True,
+    )
+
+    deck = pdk.Deck(
+        layers=[arc_layer, scatter],
+        initial_view_state=pdk.ViewState(
+            latitude=float(target["lat"]),
+            longitude=float(target["lon"]),
+            zoom=2,
+            pitch=35,
+        ),
+        tooltip={
+            "html": "<b>{label}</b><br/>{kind}",
+            "style": {"backgroundColor": "rgba(33, 33, 33, 0.85)", "color": "white"},
+        },
+        map_style="light",
+    )
+
+    st.pydeck_chart(deck, use_container_width=True)
+
+    legend_items = []
+    for _, row in map_df.sort_values("rank").iterrows():
+        color = map_color_for_rank(int(row["rank"]))[:3]
+        rgb = f"rgb({color[0]}, {color[1]}, {color[2]})"
+        legend_items.append(
+            f"<span style='display:inline-flex;align-items:center;margin-right:14px;'>"
+            f"<span style='width:11px;height:11px;border-radius:50%;background:{rgb};display:inline-block;margin-right:6px;'></span>"
+            f"{row['kind']}"
+            f"</span>"
         )
+    st.markdown("".join(legend_items), unsafe_allow_html=True)
 
 
 st.title("Climate Analog Explorer")
